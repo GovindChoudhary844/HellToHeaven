@@ -9,13 +9,13 @@ public class HeroKnight : MonoBehaviour
     [SerializeField] private float deceleration = 40.0f;
     [SerializeField] private float airAcceleration = 20.0f;
 
-    [Header("Jumping (Smooth & Forgiving)")]
+    [Header("Jumping (Strict Limits)")]
     [SerializeField] private float jumpForce = 12.0f;
     [SerializeField] private float fallMultiplier = 2.5f;
     [SerializeField] private float jumpCutMultiplier = 0.4f;
     [SerializeField] private int maxJumps = 2;
 
-    [Header("FOOLPROOF GROUND DETECTION")]
+    [Header("Foolproof Ground Detection")]
     [SerializeField] private Transform groundCheck;
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask whatIsGround;
@@ -26,11 +26,10 @@ public class HeroKnight : MonoBehaviour
 
     [Header("Combat & Actions")]
     [SerializeField] private float rollForce = 6.0f;
-    [SerializeField] private float attackLockDuration = 0.4f; // NEW: How long he is locked in place while attacking
+    [SerializeField] private float attackLockDuration = 0.4f;
     [SerializeField] private bool noBlood = false;
     [SerializeField] private GameObject slideDust;
 
-    // Internal Physics & Timers
     private Animator animator;
     private Rigidbody2D body2d;
 
@@ -47,28 +46,13 @@ public class HeroKnight : MonoBehaviour
     [SerializeField] private int jumpsRemaining;
     private float coyoteTimeCounter;
     private float jumpBufferCounter;
+    private float jumpCooldownTimer; // CRITICAL: The airtight lock
     private float rollCurrentTime;
     private float rollDuration = 8.0f / 14.0f;
 
     private int currentAttack = 0;
     private float timeSinceAttack = 0.0f;
     private float delayToIdle = 0.0f;
-
-    // Cached Animation Hashes
-    private readonly int hashGrounded = Animator.StringToHash("Grounded");
-    private readonly int hashJump = Animator.StringToHash("Jump");
-    private readonly int hashAnimState = Animator.StringToHash("AnimState");
-    private readonly int hashAirSpeedY = Animator.StringToHash("AirSpeedY");
-    private readonly int hashWallSlide = Animator.StringToHash("WallSlide");
-    private readonly int hashDeath = Animator.StringToHash("Death");
-    private readonly int hashHurt = Animator.StringToHash("Hurt");
-    private readonly int hashAttack1 = Animator.StringToHash("Attack1");
-    private readonly int hashAttack2 = Animator.StringToHash("Attack2");
-    private readonly int hashAttack3 = Animator.StringToHash("Attack3");
-    private readonly int hashBlock = Animator.StringToHash("Block");
-    private readonly int hashIdleBlock = Animator.StringToHash("IdleBlock");
-    private readonly int hashRoll = Animator.StringToHash("Roll");
-    private readonly int hashNoBlood = Animator.StringToHash("noBlood");
 
     void Start()
     {
@@ -112,7 +96,9 @@ public class HeroKnight : MonoBehaviour
         if (grounded)
         {
             coyoteTimeCounter = coyoteTime;
-            if (body2d.velocity.y <= 0.1f)
+
+            // STRICT RULE: Only refill jumps if resting on the ground AND not in a jump cooldown
+            if (body2d.linearVelocity.y <= 0.1f && jumpCooldownTimer <= 0f)
             {
                 jumpsRemaining = maxJumps;
             }
@@ -120,15 +106,19 @@ public class HeroKnight : MonoBehaviour
         else
         {
             coyoteTimeCounter -= Time.deltaTime;
+
+            // STRICT RULE: Walk off a ledge = lose your ground jump instantly
             if (wasGrounded && jumpsRemaining == maxJumps)
             {
-                jumpsRemaining = maxJumps - 1;
+                jumpsRemaining = 1;
             }
         }
     }
 
     private void HandleInput()
     {
+        jumpCooldownTimer -= Time.deltaTime; // Always tick down the lock timer
+
         if (Input.GetKeyDown(KeyCode.Space))
         {
             jumpBufferCounter = jumpBufferTime;
@@ -138,13 +128,13 @@ public class HeroKnight : MonoBehaviour
             jumpBufferCounter -= Time.deltaTime;
         }
 
-        if (Input.GetKeyUp(KeyCode.Space) && body2d.velocity.y > 0)
+        if (Input.GetKeyUp(KeyCode.Space) && body2d.linearVelocity.y > 0)
         {
-            body2d.velocity = new Vector2(body2d.velocity.x, body2d.velocity.y * jumpCutMultiplier);
+            body2d.linearVelocity = new Vector2(body2d.linearVelocity.x, body2d.linearVelocity.y * jumpCutMultiplier);
         }
 
-        // UPDATED: Prevent jumping if the player is currently locked in an attack animation
-        if (jumpBufferCounter > 0f && !rolling && timeSinceAttack >= attackLockDuration)
+        // AIRTIGHT CHECK: jumpCooldownTimer must be <= 0f to allow jumping
+        if (jumpBufferCounter > 0f && !rolling && timeSinceAttack >= attackLockDuration && jumpCooldownTimer <= 0f)
         {
             if (coyoteTimeCounter > 0f || jumpsRemaining > 0)
             {
@@ -155,14 +145,15 @@ public class HeroKnight : MonoBehaviour
 
     private void ExecuteJump()
     {
-        animator.SetTrigger(hashJump);
+        animator.SetTrigger(Tags.Jump);
         grounded = false;
-        animator.SetBool(hashGrounded, grounded);
+        animator.SetBool(Tags.Grounded, grounded);
 
-        body2d.velocity = new Vector2(body2d.velocity.x, 0);
-        body2d.velocity = new Vector2(body2d.velocity.x, jumpForce);
+        body2d.linearVelocity = new Vector2(body2d.linearVelocity.x, 0);
+        body2d.linearVelocity = new Vector2(body2d.linearVelocity.x, jumpForce);
 
         jumpsRemaining--;
+        jumpCooldownTimer = 0.2f; // CRITICAL: Locks out all jumps and jump-resets for 0.2 seconds!
         jumpBufferCounter = 0f;
         coyoteTimeCounter = 0f;
     }
@@ -172,10 +163,8 @@ public class HeroKnight : MonoBehaviour
         if (rolling) return;
 
         float inputX = Input.GetAxisRaw("Horizontal");
-        bool isSSprint = Input.GetKey(KeyCode.LeftShift);
+        bool isSprinting = Input.GetKey(KeyCode.LeftShift);
 
-        // --- THE FIX: Block movement input if attacking ---
-        // If Kael is on the ground and recently attacked, force his input to 0 so he slides to a stop
         if (grounded && timeSinceAttack < attackLockDuration)
         {
             inputX = 0f;
@@ -184,7 +173,7 @@ public class HeroKnight : MonoBehaviour
         if (inputX > 0) { GetComponent<SpriteRenderer>().flipX = false; facingDirection = 1; }
         else if (inputX < 0) { GetComponent<SpriteRenderer>().flipX = true; facingDirection = -1; }
 
-        float targetSpeed = inputX * (isSSprint ? sprintSpeed : walkSpeed);
+        float targetSpeed = inputX * (isSprinting ? sprintSpeed : walkSpeed);
 
         float accelRate;
         if (Mathf.Abs(targetSpeed) > 0.01f)
@@ -192,40 +181,39 @@ public class HeroKnight : MonoBehaviour
         else
             accelRate = grounded ? deceleration : airAcceleration;
 
-        float speedDif = targetSpeed - body2d.velocity.x;
+        float speedDif = targetSpeed - body2d.linearVelocity.x;
         float movement = speedDif * accelRate * Time.deltaTime;
 
-        body2d.velocity = new Vector2(body2d.velocity.x + movement, body2d.velocity.y);
+        body2d.linearVelocity = new Vector2(body2d.linearVelocity.x + movement, body2d.linearVelocity.y);
     }
 
     private void ApplyCinematicGravity()
     {
-        if (body2d.velocity.y < 0 && !grounded)
+        if (body2d.linearVelocity.y < 0 && !grounded)
         {
-            body2d.velocity += Vector2.up * Physics2D.gravity.y * (fallMultiplier - 1) * Time.deltaTime;
+            body2d.linearVelocity += Vector2.up * Physics2D.gravity.y * (fallMultiplier - 1) * Time.deltaTime;
         }
     }
 
     private void UpdateAnimations()
     {
-        animator.SetFloat(hashAirSpeedY, body2d.velocity.y);
-        animator.SetBool(hashGrounded, grounded);
+        animator.SetFloat(Tags.AirSpeedY, body2d.linearVelocity.y);
+        animator.SetBool(Tags.Grounded, grounded);
 
         isWallSliding = (wallSensorR1.State() && wallSensorR2.State()) || (wallSensorL1.State() && wallSensorL2.State());
-        animator.SetBool(hashWallSlide, isWallSliding);
+        animator.SetBool(Tags.WallSlide, isWallSliding);
 
         float inputX = Input.GetAxisRaw("Horizontal");
 
-        // Prevent the run animation from playing if we are attacking
         if (Mathf.Abs(inputX) > Mathf.Epsilon && timeSinceAttack >= attackLockDuration)
         {
             delayToIdle = 0.05f;
-            animator.SetInteger(hashAnimState, 1);
+            animator.SetInteger(Tags.AnimState, 1);
         }
         else
         {
             delayToIdle -= Time.deltaTime;
-            if (delayToIdle < 0) animator.SetInteger(hashAnimState, 0);
+            if (delayToIdle < 0) animator.SetInteger(Tags.AnimState, 0);
         }
     }
 
@@ -233,39 +221,39 @@ public class HeroKnight : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.E) && !rolling)
         {
-            animator.SetBool(hashNoBlood, noBlood);
-            animator.SetTrigger(hashDeath);
+            animator.SetBool(Tags.NoBlood, noBlood);
+            animator.SetTrigger(Tags.Death);
         }
         else if (Input.GetKeyDown(KeyCode.Q) && !rolling)
-            animator.SetTrigger(hashHurt);
+            animator.SetTrigger(Tags.Hurt);
 
-        else if (Input.GetMouseButtonDown(0) && timeSinceAttack > 0.25f && !rolling && grounded) // Only attack on ground
+        else if (Input.GetMouseButtonDown(0) && timeSinceAttack > 0.25f && !rolling && grounded)
         {
             currentAttack++;
             if (currentAttack > 3) currentAttack = 1;
             if (timeSinceAttack > 1.0f) currentAttack = 1;
 
-            if (currentAttack == 1) animator.SetTrigger(hashAttack1);
-            else if (currentAttack == 2) animator.SetTrigger(hashAttack2);
-            else if (currentAttack == 3) animator.SetTrigger(hashAttack3);
+            if (currentAttack == 1) animator.SetTrigger(Tags.Attack1);
+            else if (currentAttack == 2) animator.SetTrigger(Tags.Attack2);
+            else if (currentAttack == 3) animator.SetTrigger(Tags.Attack3);
 
             timeSinceAttack = 0.0f;
         }
 
         else if (Input.GetMouseButtonDown(1) && !rolling)
         {
-            animator.SetTrigger(hashBlock);
-            animator.SetBool(hashIdleBlock, true);
+            animator.SetTrigger(Tags.Block);
+            animator.SetBool(Tags.IdleBlock, true);
         }
         else if (Input.GetMouseButtonUp(1))
-            animator.SetBool(hashIdleBlock, false);
+            animator.SetBool(Tags.IdleBlock, false);
 
         else if (Input.GetKeyDown(KeyCode.LeftControl) && !rolling && !isWallSliding && timeSinceAttack >= attackLockDuration)
         {
             rolling = true;
             rollCurrentTime = 0f;
-            animator.SetTrigger(hashRoll);
-            body2d.velocity = new Vector2(facingDirection * rollForce, body2d.velocity.y);
+            animator.SetTrigger(Tags.Roll);
+            body2d.linearVelocity = new Vector2(facingDirection * rollForce, body2d.linearVelocity.y);
         }
     }
 

@@ -76,7 +76,7 @@ public class PlayerRopeGrab : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Space))
         {
             DetachFromRope();
-            rb.velocity = new Vector2(horizontalInput * swingForce * 0.5f, jumpOffForce);
+            rb.linearVelocity = new Vector2(horizontalInput * swingForce * 0.5f, jumpOffForce);
         }
     }
 
@@ -89,7 +89,7 @@ public class PlayerRopeGrab : MonoBehaviour
         if (playerMovement != null)
         {
             playerMovement.enabled = true;
-            rb.velocity = Vector2.zero;
+            rb.linearVelocity = Vector2.zero;
         }
         if (ropeJoint != null)
         {
