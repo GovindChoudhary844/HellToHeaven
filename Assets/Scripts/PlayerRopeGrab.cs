@@ -70,7 +70,7 @@ public class PlayerRopeGrab : MonoBehaviour
         float verticalInput = Input.GetAxisRaw("Vertical");
         if (verticalInput != 0)
         {
-            ropeJoint.anchor += new Vector2(0, -verticalInput * climbSpeed * Time.deltaTime);
+            ropeJoint.connectedAnchor += new Vector2(0, verticalInput * climbSpeed * Time.deltaTime);
         }
 
         if (Input.GetKeyDown(KeyCode.Space))

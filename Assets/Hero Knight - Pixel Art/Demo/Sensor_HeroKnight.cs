@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 
 public class Sensor_HeroKnight : MonoBehaviour {
@@ -21,11 +21,20 @@ public class Sensor_HeroKnight : MonoBehaviour {
 
     void OnTriggerEnter2D(Collider2D other)
     {
+        // Ignore colliders attached to the player (preventing false wall detection on ourselves)
+        if (other.transform.IsChildOf(transform.parent)) return;
+        
+        // Ignore triggers (like coins, hitboxes, ropes) so they aren't treated as solid walls
+        if (other.isTrigger) return;
+
         m_ColCount++;
     }
 
     void OnTriggerExit2D(Collider2D other)
     {
+        if (other.transform.IsChildOf(transform.parent)) return;
+        if (other.isTrigger) return;
+
         m_ColCount--;
     }
 

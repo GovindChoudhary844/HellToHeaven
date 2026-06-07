@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class HeroKnight : MonoBehaviour
 {
@@ -29,9 +29,11 @@ public class HeroKnight : MonoBehaviour
     [SerializeField] private float attackLockDuration = 0.4f;
     [SerializeField] private bool noBlood = false;
     [SerializeField] private GameObject slideDust;
+    [SerializeField] private float rollDuration = 8.0f / 14.0f; // Declared and initialized here
 
     private Animator animator;
     private Rigidbody2D body2d;
+    private SpriteRenderer spriteRenderer; // Declared here
 
     private Sensor_HeroKnight wallSensorR1;
     private Sensor_HeroKnight wallSensorR2;
@@ -48,8 +50,6 @@ public class HeroKnight : MonoBehaviour
     private float jumpBufferCounter;
     private float jumpCooldownTimer; // CRITICAL: The airtight lock
     private float rollCurrentTime;
-    private float rollDuration = 8.0f / 14.0f;
-
     private int currentAttack = 0;
     private float timeSinceAttack = 0.0f;
     private float delayToIdle = 0.0f;
@@ -58,6 +58,7 @@ public class HeroKnight : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         body2d = GetComponent<Rigidbody2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>(); // Initialize cached SpriteRenderer
 
         wallSensorR1 = transform.Find("WallSensor_R1").GetComponent<Sensor_HeroKnight>();
         wallSensorR2 = transform.Find("WallSensor_R2").GetComponent<Sensor_HeroKnight>();
@@ -170,8 +171,8 @@ public class HeroKnight : MonoBehaviour
             inputX = 0f;
         }
 
-        if (inputX > 0) { GetComponent<SpriteRenderer>().flipX = false; facingDirection = 1; }
-        else if (inputX < 0) { GetComponent<SpriteRenderer>().flipX = true; facingDirection = -1; }
+        if (inputX > 0) { spriteRenderer.flipX = false; facingDirection = 1; } // Use cached SpriteRenderer
+        else if (inputX < 0) { spriteRenderer.flipX = true; facingDirection = -1; } // Use cached SpriteRenderer
 
         float targetSpeed = inputX * (isSprinting ? sprintSpeed : walkSpeed);
 
@@ -200,10 +201,16 @@ public class HeroKnight : MonoBehaviour
         animator.SetFloat(Tags.AirSpeedY, body2d.linearVelocity.y);
         animator.SetBool(Tags.Grounded, grounded);
 
-        isWallSliding = (wallSensorR1.State() && wallSensorR2.State()) || (wallSensorL1.State() && wallSensorL2.State());
-        animator.SetBool(Tags.WallSlide, isWallSliding);
-
         float inputX = Input.GetAxisRaw("Horizontal");
+
+        bool touchingWallR = wallSensorR1.State() && wallSensorR2.State();
+        bool touchingWallL = wallSensorL1.State() && wallSensorL2.State();
+        
+        // Only set WallSlide to true if the player is pushing AGAINST the wall.
+        // This prevents the WallSlide animation from overriding the Fall animation.
+        isWallSliding = (touchingWallR && inputX > 0) || (touchingWallL && inputX < 0);
+        
+        animator.SetBool(Tags.WallSlide, isWallSliding);
 
         if (Mathf.Abs(inputX) > Mathf.Epsilon && timeSinceAttack >= attackLockDuration)
         {

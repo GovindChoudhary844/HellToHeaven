@@ -31,6 +31,12 @@ public class PlayerPushPull : MonoBehaviour
 
     void Update()
     {
+        if (isGrabbing && grabbedObject == null)
+        {
+            ReleaseObject();
+            return;
+        }
+
         float facingDirection = spriteRenderer.flipX ? -1f : 1f;
         Vector2 rayOrigin = new Vector2(transform.position.x, transform.position.y + raycastOffsetY);
         Vector2 rayDirection = new Vector2(facingDirection, 0);
@@ -44,6 +50,19 @@ public class PlayerPushPull : MonoBehaviour
         else if (Input.GetKeyUp(grabKey) && isGrabbing)
         {
             ReleaseObject();
+        }
+    }
+
+    void LateUpdate()
+    {
+        if (isGrabbing && grabbedObject != null)
+        {
+            // Force facing direction towards the grabbed object
+            float dirToObject = grabbedObject.transform.position.x - transform.position.x;
+            if (Mathf.Abs(dirToObject) > 0.01f)
+            {
+                spriteRenderer.flipX = dirToObject < 0;
+            }
         }
     }
 
