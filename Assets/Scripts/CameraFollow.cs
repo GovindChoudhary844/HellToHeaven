@@ -2,6 +2,15 @@ using UnityEngine;
 
 public class CameraFollow : MonoBehaviour
 {
+  /// <summary>
+  /// Redirects the camera to follow a new target. Called by CharacterManager on swap.
+  /// Resets the smoothing velocity so the camera doesn't drift from the old target's momentum.
+  /// </summary>
+  public void SetTarget(Transform newTarget)
+  {
+    target           = newTarget;
+    currentVelocity  = Vector3.zero; // Reset SmoothDamp velocity to prevent drift
+  }
   [SerializeField] private Transform target; // The player's transform
   [SerializeField] private float smoothSpeed = 0.125f; // How smoothly the camera follows
   [SerializeField] private Vector3 offset; // Offset from the player (e.g., to see above/behind)

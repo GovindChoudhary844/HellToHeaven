@@ -57,8 +57,10 @@ namespace TMPro.Examples
             else
                 Application.targetFrameRate = -1;
 
+#if ENABLE_LEGACY_INPUT_MANAGER
             if (Application.platform == RuntimePlatform.IPhonePlayer || Application.platform == RuntimePlatform.Android)
                 Input.simulateMouseWithTouches = false;
+#endif
 
             cameraTransform = transform;
             previousSmoothing = MovementSmoothing;
@@ -125,6 +127,7 @@ namespace TMPro.Examples
 
         void GetPlayerInput()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
             moveVector = Vector3.zero;
 
             // Check Mouse Wheel Input prior to Shift Key so we can apply multiplier on Shift for Scrolling
@@ -182,8 +185,7 @@ namespace TMPro.Examples
                         ElevationAngle = Mathf.Clamp(ElevationAngle, MinElevationAngle, MaxElevationAngle);
                     }
 
-
-                    // Handle left & right 
+                    // Handle left & right
                     if (deltaPosition.x > 0.01f || deltaPosition.x < -0.01f)
                     {
                         OrbitalAngle += deltaPosition.x * 0.1f;
@@ -192,7 +194,6 @@ namespace TMPro.Examples
                         if (OrbitalAngle < 0)
                             OrbitalAngle += 360;
                     }
-
                 }
 
                 // Check for left mouse button to select a new CameraTarget or to reset Follow position
@@ -214,16 +215,13 @@ namespace TMPro.Examples
                             OrbitalAngle = 0;
                             MovementSmoothing = previousSmoothing;
                         }
-
                     }
                 }
-
 
                 if (Input.GetMouseButton(2))
                 {
                     if (dummyTarget == null)
                     {
-                        // We need a Dummy Target to anchor the Camera
                         dummyTarget = new GameObject("Camera Target").transform;
                         dummyTarget.position = CameraTarget.position;
                         dummyTarget.rotation = CameraTarget.rotation;
@@ -233,7 +231,6 @@ namespace TMPro.Examples
                     }
                     else if (dummyTarget != CameraTarget)
                     {
-                        // Move DummyTarget to CameraTarget
                         dummyTarget.position = CameraTarget.position;
                         dummyTarget.rotation = CameraTarget.rotation;
                         CameraTarget = dummyTarget;
@@ -241,16 +238,11 @@ namespace TMPro.Examples
                         MovementSmoothing = false;
                     }
 
-
                     mouseY = Input.GetAxis("Mouse Y");
                     mouseX = Input.GetAxis("Mouse X");
-
                     moveVector = cameraTransform.TransformDirection(mouseX, mouseY, 0);
-
                     dummyTarget.Translate(-moveVector, Space.World);
-
                 }
-
             }
 
             // Check Pinching to Zoom in - out on Mobile device
@@ -270,23 +262,17 @@ namespace TMPro.Examples
                 if (zoomDelta > 0.01f || zoomDelta < -0.01f)
                 {
                     FollowDistance += zoomDelta * 0.25f;
-                    // Limit FollowDistance between min & max values.
                     FollowDistance = Mathf.Clamp(FollowDistance, MinFollowDistance, MaxFollowDistance);
                 }
-
-
             }
 
             // Check MouseWheel to Zoom in-out
             if (mouseWheel < -0.01f || mouseWheel > 0.01f)
             {
-
                 FollowDistance -= mouseWheel * 5.0f;
-                // Limit FollowDistance between min & max values.
                 FollowDistance = Mathf.Clamp(FollowDistance, MinFollowDistance, MaxFollowDistance);
             }
-
-
+#endif // ENABLE_LEGACY_INPUT_MANAGER
         }
     }
 }

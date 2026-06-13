@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using System;
@@ -122,6 +122,7 @@ namespace TMPro
 
         void LateUpdate()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
             if (TMP_TextUtilities.IsIntersectingRectTransform(m_TextComponent.rectTransform, Input.mousePosition, m_Camera))
             {
                 #region Nearest Character
@@ -214,6 +215,7 @@ namespace TMPro
                 m_lastWordIndex = -1;
                 m_lastLineIndex = -1;
             }
+#endif // ENABLE_LEGACY_INPUT_MANAGER
         }
 
 

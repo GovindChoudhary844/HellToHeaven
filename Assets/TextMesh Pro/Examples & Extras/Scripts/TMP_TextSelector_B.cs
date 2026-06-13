@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using System.Collections;
@@ -80,6 +80,7 @@ namespace TMPro.Examples
 
         void LateUpdate()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
             if (isHoveringObject)
             {
                 // Check if Mouse Intersects any of the characters. If so, assign a random color.
@@ -286,7 +287,7 @@ namespace TMPro.Examples
                     m_lastIndex = -1;
                 }
             }
-
+#endif // ENABLE_LEGACY_INPUT_MANAGER
         }
 
 
