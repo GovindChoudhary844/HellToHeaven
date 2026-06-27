@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Cinemachine;
 
 /// <summary>
 /// CharacterManager — Dual-Character System for "Aether & Abyss".
@@ -27,24 +28,33 @@ using UnityEngine.InputSystem;
 /// </summary>
 public class CharacterManager : MonoBehaviour
 {
+    public static event System.Action<bool> OnRealmSwapped;
+
     // -------------------------------------------------------------------------
     // Inspector fields
     // -------------------------------------------------------------------------
 
-    [Header("Active Player Character (Hell — Kael)")]
-    [Tooltip("HeroKnight instance that starts as the playable PC.")]
-    [SerializeField] private HeroKnight characterA;
+    [Header("Character Prefabs")]
+    [Tooltip("HeroKnight prefab for Kael.")]
+    [SerializeField] private GameObject kaelPrefab;
 
-    [Header("Partner NPC (Heaven — Elara)")]
-    [Tooltip("HeroKnight instance for Elara. Leave null if using a placeholder.")]
-    [SerializeField] private HeroKnight characterB;
+    [Tooltip("HeroKnight prefab for Elara.")]
+    [SerializeField] private GameObject elaraPrefab;
 
-    [Tooltip("Fallback: assign Elara's placeholder GameObject (Cube) here when characterB has no HeroKnight.")]
-    [SerializeField] private GameObject elaraPlaceholder;
+    // Track instantiated characters
+    private HeroKnight characterA;
+    private HeroKnight characterB;
+
+    [Header("Spawning & Location")]
+    [Tooltip("The transform where characters spawn when the scene starts.")]
+    [SerializeField] private Transform playerSpawnPoint;
 
     [Header("Camera")]
-    [Tooltip("The main CameraFollow component in the scene.")]
+    [Tooltip("The main CameraFollow component in the scene (Legacy).")]
     [SerializeField] private CameraFollow cameraFollow;
+
+    [Tooltip("The Cinemachine Virtual Camera in the scene.")]
+    [SerializeField] private CinemachineVirtualCamera virtualCamera;
 
     // -------------------------------------------------------------------------
     // Runtime state
@@ -79,55 +89,74 @@ public class CharacterManager : MonoBehaviour
 
     private void Awake()
     {
-        // Validate: must have at least characterA
-        if (characterA == null)
+        // Validate: must have prefabs assigned
+        if (kaelPrefab == null || elaraPrefab == null)
         {
-            Debug.LogError("[CharacterManager] characterA (Kael) is not assigned. Disabling.");
+            Debug.LogError("[CharacterManager] Prefabs are not assigned. Disabling.");
             enabled = false;
             return;
         }
-
-        // Warn if neither characterB nor placeholder is set
-        if (characterB == null && elaraPlaceholder == null)
-            Debug.LogWarning("[CharacterManager] Neither characterB nor elaraPlaceholder is assigned. Swap will have no target.");
 
         // Resolve camera
         if (cameraFollow == null)
             cameraFollow = FindFirstObjectByType<CameraFollow>();
 
-        // Cache characterA components
-        _rendererA  = characterA.GetComponent<SpriteRenderer>();
-        _collidersA = characterA.GetComponents<Collider2D>();
+        if (virtualCamera == null)
+            virtualCamera = FindFirstObjectByType<CinemachineVirtualCamera>();
 
-        // Cache characterB (real HeroKnight) components if present
-        if (characterB != null)
+        // Do NOT spawn here. We wait for SelectCharacter() from the UI.
+        
+        // Ensure Character Selection UI is active even if user disabled it in the editor
+        CharacterSelectionUI selectionUI = FindFirstObjectByType<CharacterSelectionUI>(FindObjectsInactive.Include);
+        if (selectionUI != null && !selectionUI.gameObject.activeSelf)
         {
-            _rendererB  = characterB.GetComponent<SpriteRenderer>();
-            _collidersB = characterB.GetComponents<Collider2D>();
+            selectionUI.gameObject.SetActive(true);
         }
-
-        // Cache placeholder components if using a cube
-        if (elaraPlaceholder != null)
-        {
-            _placeholderRenderer  = elaraPlaceholder.GetComponent<Renderer>();
-            _placeholderColliders = elaraPlaceholder.GetComponents<Collider>();
-        }
-
-        // Initial state: Kael active, Elara/placeholder dormant
-        _aIsActive      = true;
-        ActiveCharacter   = characterA;
-        InactiveCharacter = characterB; // may be null if placeholder
-
-        SetHeroKnightActive(characterA, _rendererA, _collidersA, isActive: true);
-        SetHeroKnightActive(characterB, _rendererB, _collidersB, isActive: false);
-        SetPlaceholderActive(isActive: false);
-
-        SetCameraTarget(characterA.transform);
 
         // Dedicated swap input
         _managerControls = new PlayerControls();
         _managerControls.Gameplay.Interact.performed += OnSwapPerformed;
+        // Do not enable controls until character is selected
+    }
+
+    /// <summary>
+    /// Called by the UI buttons to finalize character selection and start the game.
+    /// </summary>
+    public void SelectCharacter(bool chooseKael)
+    {
+        Vector3 spawnPos = playerSpawnPoint != null ? playerSpawnPoint.position : Vector3.zero;
+
+        // Instantiate both characters
+        GameObject kaelGo = Instantiate(kaelPrefab, spawnPos, Quaternion.identity);
+        GameObject elaraGo = Instantiate(elaraPrefab, spawnPos, Quaternion.identity);
+
+        characterA = kaelGo.GetComponent<HeroKnight>();
+        characterB = elaraGo.GetComponent<HeroKnight>();
+
+        // Cache components
+        _rendererA  = characterA.GetComponent<SpriteRenderer>();
+        _collidersA = characterA.GetComponents<Collider2D>();
+
+        _rendererB  = characterB.GetComponent<SpriteRenderer>();
+        _collidersB = characterB.GetComponents<Collider2D>();
+
+        // Set active/inactive based on selection
+        _aIsActive = chooseKael;
+        ActiveCharacter = chooseKael ? characterA : characterB;
+        InactiveCharacter = chooseKael ? characterB : characterA;
+
+        SetHeroKnightActive(characterA, _rendererA, _collidersA, isActive: chooseKael);
+        SetHeroKnightActive(characterB, _rendererB, _collidersB, isActive: !chooseKael);
+
+        SetCameraTarget(ActiveCharacter.transform);
+
+        // Enable input
         _managerControls.Gameplay.Enable();
+
+        // Broadcast initial state
+        OnRealmSwapped?.Invoke(chooseKael);
+
+        Debug.Log($"[CharacterManager] Game Started. Selected Kael: {chooseKael}");
     }
 
     private void OnDestroy()
@@ -146,6 +175,21 @@ public class CharacterManager : MonoBehaviour
     /// <summary>Public swap — can also be called from UI or triggers.</summary>
     public void SwapCharacters()
     {
+        // Capture outgoing state before swap
+        Vector3 syncPosition = transform.position;
+        Vector2 syncVelocity = Vector2.zero;
+        bool faceLeft = false;
+
+        if (ActiveCharacter != null)
+        {
+            syncPosition = ActiveCharacter.transform.position;
+            var activeRb = ActiveCharacter.GetComponent<Rigidbody2D>();
+            if (activeRb != null) syncVelocity = activeRb.linearVelocity;
+            
+            var activeRend = ActiveCharacter.GetComponent<SpriteRenderer>();
+            if (activeRend != null) faceLeft = activeRend.flipX;
+        }
+
         _aIsActive = !_aIsActive;
 
         // Apply states
@@ -153,23 +197,32 @@ public class CharacterManager : MonoBehaviour
 
         if (characterB != null)
         {
+            // Sync incoming position
+            if (!_aIsActive) characterB.transform.position = syncPosition;
+            else if (_aIsActive && characterA != null) characterA.transform.position = syncPosition;
+
             SetHeroKnightActive(characterB, _rendererB, _collidersB, isActive: !_aIsActive);
             InactiveCharacter = _aIsActive ? characterB : characterA;
-        }
-        else
-        {
-            // Toggle placeholder visibility instead
-            SetPlaceholderActive(isActive: !_aIsActive);
         }
 
         ActiveCharacter = _aIsActive ? characterA : characterB;
 
-        // Redirect camera to the new active character (or keep on Kael if B has no HeroKnight)
-        Transform camTarget = ActiveCharacter != null
-            ? ActiveCharacter.transform
-            : (elaraPlaceholder != null ? elaraPlaceholder.transform : characterA.transform);
+        // Sync incoming velocity and facing to preserve momentum in mid-air
+        if (ActiveCharacter != null)
+        {
+            var incomingRb = ActiveCharacter.GetComponent<Rigidbody2D>();
+            if (incomingRb != null) incomingRb.linearVelocity = syncVelocity;
 
+            var incomingRend = ActiveCharacter.GetComponent<SpriteRenderer>();
+            if (incomingRend != null) incomingRend.flipX = faceLeft;
+        }
+
+        // Redirect camera to the new active character
+        Transform camTarget = ActiveCharacter != null ? ActiveCharacter.transform : transform;
         SetCameraTarget(camTarget);
+
+        // Broadcast swap to environment
+        OnRealmSwapped?.Invoke(_aIsActive);
 
         Debug.Log($"[CharacterManager] Swapped — Kael active: {_aIsActive}");
     }
@@ -188,6 +241,14 @@ public class CharacterManager : MonoBehaviour
         if (cols != null)
             foreach (var col in cols) col.enabled = isActive;
 
+        // Suspend physics for the inactive character so they don't fall through the floor!
+        var rb = hk.GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.simulated = isActive;
+            if (!isActive) rb.linearVelocity = Vector2.zero; // Clear velocity when putting to sleep
+        }
+
         var pp = hk.GetComponent<PlayerPushPull>();
         if (pp != null) pp.enabled = isActive;
 
@@ -195,18 +256,12 @@ public class CharacterManager : MonoBehaviour
         if (rg != null) rg.enabled = isActive;
     }
 
-    private void SetPlaceholderActive(bool isActive)
-    {
-        if (elaraPlaceholder == null) return;
-
-        if (_placeholderRenderer  != null) _placeholderRenderer.enabled  = isActive;
-        if (_placeholderColliders != null)
-            foreach (var col in _placeholderColliders) col.enabled = isActive;
-    }
-
     private void SetCameraTarget(Transform newTarget)
     {
         if (cameraFollow != null)
             cameraFollow.SetTarget(newTarget);
+            
+        if (virtualCamera != null)
+            virtualCamera.Follow = newTarget;
     }
 }

@@ -60,6 +60,8 @@ public class HeroKnight : MonoBehaviour, PlayerControls.IGameplayActions
     private Sensor_HeroKnight wallSensorL1;
     private Sensor_HeroKnight wallSensorL2;
 
+    private SprintCloneEffect sprintCloneEffect;
+
     // -------------------------------------------------------------------------
     // New Input System
     // -------------------------------------------------------------------------
@@ -112,6 +114,8 @@ public class HeroKnight : MonoBehaviour, PlayerControls.IGameplayActions
         wallSensorR2 = transform.Find("WallSensor_R2").GetComponent<Sensor_HeroKnight>();
         wallSensorL1 = transform.Find("WallSensor_L1").GetComponent<Sensor_HeroKnight>();
         wallSensorL2 = transform.Find("WallSensor_L2").GetComponent<Sensor_HeroKnight>();
+
+        sprintCloneEffect = GetComponent<SprintCloneEffect>();
 
         if (groundCheck == null)
             groundCheck = transform.Find("GroundSensor");
@@ -319,6 +323,12 @@ public class HeroKnight : MonoBehaviour, PlayerControls.IGameplayActions
         float movement  = speedDif * accelRate * Time.deltaTime;
 
         body2d.linearVelocity = new Vector2(body2d.linearVelocity.x + movement, body2d.linearVelocity.y);
+
+        // --- Visual Effects ---
+        if (_isSprinting && Mathf.Abs(body2d.linearVelocity.x) > walkSpeed + 0.1f)
+        {
+            if (sprintCloneEffect != null) sprintCloneEffect.RequestClone();
+        }
     }
 
     // =========================================================================
